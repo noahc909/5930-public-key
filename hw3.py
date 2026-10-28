@@ -1,10 +1,32 @@
 import cv2
 import os
+import secrets
+import numpy as np
+
+N = 256      # polynomial degree: ring R_q = Z_q[x]/(x^N + 1)
+Q = 7681     # modulus
 vid = cv2.VideoCapture(0)
 
 def key_generation():
     #todo
-    return None
+    # Ring-LWE key generation: p = r1 - a*r2 in Z_q[x]/(x^N + 1)
+    # a: public random polynomial, uniform in Z_q
+    a = np.array([secrets.randbelow(Q) for _ in range(N)], dtype=np.int64)
+
+    # r2 = private key, r1 = error: small polynomials, coefficients in {-1, 0, 1}
+    rb = np.frombuffer(os.urandom(N), dtype=np.uint8).astype(np.int64)
+    r2 = (rb & 1) - ((rb >> 1) & 1)
+    r1 = ((rb >> 2) & 1) - ((rb >> 3) & 1)
+
+    # a*r2 mod (x^N + 1): ordinary product, then x^N = -1 folds the upper half
+    prod = np.append(np.convolve(a, r2), 0)     # length 2N
+    a_r2 = prod[:N] - prod[N:]
+
+    p = (r1 - a_r2) % Q     # p = r1 - a*r2 (mod q)
+    public_key = (a, p)           # public key  (a, p)
+    private_key = r2      # private key r2
+    return public_key, private_key
+    #return None
 
 def key_encryption():
     #todo
@@ -57,7 +79,7 @@ def main():
             cv2.imshow("original", frame)
             
             if(len(faces) > 0):
-                #shoow encrypted and decrypted frames if face is detected
+                # show encrypted and decrypted frames if face is detected
                 face_frame = frame[y:y+h, x:x+w] #crop out the face region
                 encrypted_frame = process_encrypted_frame(face_frame); 
                 combined_frame = frame.copy() #make a copy of the original
